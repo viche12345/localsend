@@ -6,7 +6,9 @@ import android.content.Context
 import android.content.Intent
 import android.database.Cursor
 import android.net.Uri
+import android.os.Build
 import android.provider.DocumentsContract
+import android.provider.MediaStore
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -102,6 +104,16 @@ class MainActivity : FlutterActivity() {
         startActivityForResult(intent, REQUEST_CODE_PICK_FILE)
     }
 
+    private fun requireOriginalIfAvailable(uri: Uri) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                MediaStore.setRequireOriginal(contentResolver, uri)
+            } catch (e: Exception) {
+                // Ignore if setting the flag fails for any reason
+            }
+        }
+    }
+
     @SuppressLint("WrongConstant")
     @Override
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -126,6 +138,9 @@ class MainActivity : FlutterActivity() {
                 if (uri != null) {
                     contentResolver.takePersistableUriPermission(uri, takeFlags)
 
+                    // Request original when available
+                    requireOriginalIfAvailable(uri)
+
                     val files = mutableListOf<FileInfo>()
                     listFiles(uri, files)
                     val resultData = PickDirectoryResult(uri.toString(), files)
@@ -143,6 +158,10 @@ class MainActivity : FlutterActivity() {
                     data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
                 if (uri != null) {
                     contentResolver.takePersistableUriPermission(uri, takeFlags)
+
+                    // Request original when available
+                    requireOriginalIfAvailable(uri)
+
                     pendingResult?.success(uri.toString())
                     pendingResult = null
                 } else {
@@ -175,6 +194,10 @@ class MainActivity : FlutterActivity() {
                 val resultList = mutableListOf<FileInfo>()
                 for (uri in uriList) {
                     contentResolver.takePersistableUriPermission(uri, takeFlags)
+
+                    // Request original when available
+                    requireOriginalIfAvailable(uri)
+
                     val documentFile = FastDocumentFile.fromDocumentUri(this, uri)
                     if (documentFile == null) {
                         pendingResult?.error("Error", "Failed to access file", null)
@@ -204,6 +227,13 @@ class MainActivity : FlutterActivity() {
                 // Recursive call
                 listFiles(file.uri, files)
             } else if (file.isFile) {
+                // Request original when available for each file we return
+                try {
+                    requireOriginalIfAvailable(file.uri)
+                } catch (e: Exception) {
+                    // ignore
+                }
+
                 files.add(
                     FileInfo(
                         name = file.name,
