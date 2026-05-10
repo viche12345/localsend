@@ -104,13 +104,14 @@ class MainActivity : FlutterActivity() {
         startActivityForResult(intent, REQUEST_CODE_PICK_FILE)
     }
 
-    private fun requireOriginalIfAvailable(uri: Uri) {
+    /**
+     * Attempts to set the MediaStore "require original" flag for the given URI on
+     * Android R+ devices. If setting the flag fails an exception will be thrown so
+     * the caller can surface the error to Flutter.
+     */
+    private fun requireOriginalOrThrow(uri: Uri) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            try {
-                MediaStore.setRequireOriginal(contentResolver, uri)
-            } catch (e: Exception) {
-                // Ignore if setting the flag fails for any reason
-            }
+            MediaStore.setRequireOriginal(contentResolver, uri)
         }
     }
 
@@ -138,11 +139,23 @@ class MainActivity : FlutterActivity() {
                 if (uri != null) {
                     contentResolver.takePersistableUriPermission(uri, takeFlags)
 
-                    // Request original when available
-                    requireOriginalIfAvailable(uri)
+                    try {
+                        requireOriginalOrThrow(uri)
+                    } catch (e: Exception) {
+                        pendingResult?.error("SET_REQUIRE_ORIGINAL_FAILED", e.message ?: "Failed to set require original", null)
+                        pendingResult = null
+                        return
+                    }
 
                     val files = mutableListOf<FileInfo>()
-                    listFiles(uri, files)
+                    try {
+                        listFiles(uri, files)
+                    } catch (e: Exception) {
+                        pendingResult?.error("SET_REQUIRE_ORIGINAL_FAILED", e.message ?: "Failed to set require original while listing files", null)
+                        pendingResult = null
+                        return
+                    }
+
                     val resultData = PickDirectoryResult(uri.toString(), files)
                     pendingResult?.success(resultData.toMap())
                     pendingResult = null
@@ -159,8 +172,13 @@ class MainActivity : FlutterActivity() {
                 if (uri != null) {
                     contentResolver.takePersistableUriPermission(uri, takeFlags)
 
-                    // Request original when available
-                    requireOriginalIfAvailable(uri)
+                    try {
+                        requireOriginalOrThrow(uri)
+                    } catch (e: Exception) {
+                        pendingResult?.error("SET_REQUIRE_ORIGINAL_FAILED", e.message ?: "Failed to set require original", null)
+                        pendingResult = null
+                        return
+                    }
 
                     pendingResult?.success(uri.toString())
                     pendingResult = null
@@ -195,8 +213,13 @@ class MainActivity : FlutterActivity() {
                 for (uri in uriList) {
                     contentResolver.takePersistableUriPermission(uri, takeFlags)
 
-                    // Request original when available
-                    requireOriginalIfAvailable(uri)
+                    try {
+                        requireOriginalOrThrow(uri)
+                    } catch (e: Exception) {
+                        pendingResult?.error("SET_REQUIRE_ORIGINAL_FAILED", e.message ?: "Failed to set require original", null)
+                        pendingResult = null
+                        return
+                    }
 
                     val documentFile = FastDocumentFile.fromDocumentUri(this, uri)
                     if (documentFile == null) {
@@ -228,11 +251,7 @@ class MainActivity : FlutterActivity() {
                 listFiles(file.uri, files)
             } else if (file.isFile) {
                 // Request original when available for each file we return
-                try {
-                    requireOriginalIfAvailable(file.uri)
-                } catch (e: Exception) {
-                    // ignore
-                }
+                requireOriginalOrThrow(file.uri)
 
                 files.add(
                     FileInfo(
@@ -303,6 +322,7 @@ class MainActivity : FlutterActivity() {
     }
 }
 
+
 data class PickDirectoryResult(
     val directoryUri: String,
     val files: List<FileInfo>,
@@ -314,6 +334,7 @@ data class PickDirectoryResult(
         )
     }
 }
+
 
 data class FileInfo(
     val name: String,
